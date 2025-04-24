@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>전자서명 검증 실험</title>
+</head>
+<body>
+  <h2>🔐 전자서명 검증 테스트</h2>
+  <pre id="output">검증 중...</pre>
+
+  <script>
+    async function loadAndVerify() {
+      const output = document.getElementById('output');
+
+      // 1. 파일 로드 (같은 경로에 있을 때 기준)
+      const jsRes = await fetch("my_module.js");
+      const sigRes = await fetch("my_module.sig");
+      const pubRes = await fetch("public.pem");
+
+      const jsCode = await jsRes.text();
+      const sig = await sigRes.arrayBuffer();
+      const pubPem = await pubRes.text();
+
+      // 2. 공개키 파싱 (PEM → ArrayBuffer)
+      const pemToArrayBuffer = (pem) => {
+        const b64 = pem.replace(/-----(BEGIN|END) PUBLIC KEY-----/g, "").replace(/\s+/g, "");
+        const binary = atob(b64);
+        const buffer = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) buffer[i] = binary.charCodeAt(i);
+        return buffer.buffer;
+      };
+
+      const publicKey = await crypto.subtle.importKey(
+        "spki",
+        pemToArrayBuffer(pubPem),
+        { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+        false,
+        ["verify"]
+      );
+
+      // 3. 서명 검증
+      const encoder = new TextEncoder();
+      const valid = await crypto.subtle.verify(
+        "RSASSA-PKCS1-v1_5",
+        publicKey,
+        sig,
+        encoder.encode(jsCode)
+      );
+
+      // 4. 결과 출력
+      if (valid) {
+        output.textContent = "✅ 전자서명 검증 통과! JS 코드 실행 중...";
+        eval(jsCode);  // 실제 JS 코드 실행
+      } else {
+        output.textContent = "❌ 전자서명 검증 실패! JS 코드 실행 차단됨.";
+      }
+    }
+
+    loadAndVerify();
+  </script>
+</body>
+</html>
